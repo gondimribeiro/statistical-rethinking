@@ -1,0 +1,491 @@
+---
+title: "Statistical Rethinking -- Chapters 1-3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(rethinking)
+library(kableExtra)
+library(tibble)
+library(dplyr)
+```
+## p27
+```{r}
+ways = c(0, 3, 8, 9, 0)
+print(ways/sum(ways))
+```
+
+## p34
+```{r}
+dbinom(6, size=9, prob=0.5)
+```
+
+## p40 -- grid approx
+```{r}
+num_points = 100
+
+p_grid = seq(from=0, to=1, length.out=num_points)
+prior = rep(1, num_points)
+likelihood = dbinom(6, size=9, prob=p_grid)
+unstd_posterior = likelihood * prior
+posterior = unstd_posterior / sum(unstd_posterior)
+
+plot(p_grid, posterior, type="b",
+     xlab="probability of water" , ylab="posterior probability")
+
+mtext(sprintf("%d points" , num_points))
+```
+
+## p42 -- quadratic approx
+```{r}
+m = 10
+W = 6*m
+L = 3*m
+
+globe.qa = quap(
+  alist(
+    W ~ dbinom(W + L, p) , # binomial likelihood p ~ dunif(0,1) # uniform prior
+    p ~ dunif(0, 1)
+  ), 
+  data=list(W=W, L=L) 
+)
+
+# display summary of quadratic approximation
+res = precis(globe.qa)
+res
+```
+
+Conjugate prior calculation:
+```{r}
+curve(dbeta(x , W + 1 , L + 1) , from=0 , to=1) # quadratic approximation
+curve(dnorm(x , res$mean , res$sd) , lty=2 , add=TRUE)
+```
+
+## p45 -- MCMC globe toss
+```{r}
+n_samples = 100000
+p = rep(NA, n_samples) 
+p[1] = 0.5
+W = 6
+L = 3
+
+for (i in 2:n_samples) {
+  p_new = rnorm(1, p[i-1], 0.1)
+  
+  if (p_new < 0) p_new = abs(p_new)
+  if (p_new > 1) p_new = 2 - p_new
+  q0 = dbinom(W, W+L, p[i-1])
+  q1 = dbinom(W, W+L, p_new)
+  p[i] = ifelse(runif(1) < q1/q0, p_new, p[i-1])
+}
+
+dens(p, xlim=c(0, 1))
+curve(dbeta(x, W+1, L+1), lty=2, add=TRUE)
+```
+
+# Practice
+### p46, 2E1
+(1) **F**
+
+(2) **T**
+
+(3) **F**
+
+(4) **T**, because P(rain, Monday)  / P(Monday) => P(rain | Monday) * P(Monday) / P(Monday) = P(rain | Monday)
+
+### p46, 2E2
+(1) **F**
+
+(2) **F**
+
+(3) **T**
+
+(4) **F**
+
+### p46, 2E3
+(1) **T**
+
+(2) **F**
+
+(3) **F**, because P(rain | Monday) P(Monday) = P(rain, Monday)
+
+(4) **T**, because P(rain | Monday) P(Monday) / P(rain) = P(rain, Monday) / P(rain) = P(Monday | rain)
+
+(5) **F**, because P(Monday | rain) P(rain) / P(Monday) = P(rain, Monday) / P(Monday) = P(rain | Monday)
+
+### p47, 2E4
+Probability is just a tool to estimate the value of unknown variables. For instance, the share of Earth's surface that is covered by water could be measurable and we would get a specific number. However, we could leverage the globe tossing process to estimate this number. That is, when we say that the "the probability of water is 0.7" for the globe tossing example, we are saying that, given this uncertain process, we can estimate that the share of water that covers the surface of the Earth is around 70%, but we can't be sure.
+
+### p47, 2M1
+For p representing the probability of water, N the number of tosses and W the number of waters:
+
+$$
+\begin{align}
+p &\sim Uniform(0, 1) \\
+W &\sim Binomial(N, p)
+\end{align}
+$$
+(1) W, W, W
+```{r}
+globe_tossing_grid = function(N, W, num_points=100) {
+  
+  result.grid = seq(from=0, to=1, length.out=num_points)
+  
+  prior = rep(1, num_points)
+  
+  likelihood = dbinom(W, size=N, prob=result.grid)
+  unstd_posterior = likelihood * prior
+  result.posterior = unstd_posterior / sum(unstd_posterior)
+  
+  return(list(grid=result.grid, posterior=result.posterior))
+}
+
+result = globe_tossing_grid(3, 3)
+
+plot(result$grid, result$posterior, type="b",
+     xlab="probability of water" , ylab="posterior probability")
+
+mtext(sprintf("%d points" , num_points))
+```
+
+(2) W, W, W, L
+```{r}
+result = globe_tossing_grid(4, 3)
+
+plot(result$grid, result$posterior, type="b",
+     xlab="probability of water" , ylab="posterior probability")
+
+mtext(sprintf("%d points" , num_points))
+```
+
+
+(3) L, W, W, L, W, W, W
+```{r}
+result = globe_tossing_grid(7, 5)
+
+plot(result$grid, result$posterior, type="b",
+     xlab="probability of water" , ylab="posterior probability")
+
+mtext(sprintf("%d points" , num_points))
+```
+
+### p47, 2M2
+(1) W, W, W
+```{r}
+globe_tossing_grid = function(N, W, num_points=100) {
+  
+  result.grid = seq(from=0, to=1, length.out=num_points)
+  
+  prior = rep(2, num_points)
+  prior[result.grid < 0.5] = 0
+  
+  likelihood = dbinom(W, size=N, prob=result.grid)
+  unstd_posterior = likelihood * prior
+  result.posterior = unstd_posterior / sum(unstd_posterior)
+  
+  return(list(grid=result.grid, posterior=result.posterior))
+}
+
+result = globe_tossing_grid(3, 3)
+
+plot(result$grid, result$posterior, type="b",
+     xlab="probability of water" , ylab="posterior probability")
+
+mtext(sprintf("%d points" , num_points))
+```
+
+(2) W, W, W, L
+```{r}
+result = globe_tossing_grid(4, 3)
+
+plot(result$grid, result$posterior, type="b",
+     xlab="probability of water" , ylab="posterior probability")
+
+mtext(sprintf("%d points" , num_points))
+```
+
+
+(3) L, W, W, L, W, W, W
+```{r}
+result = globe_tossing_grid(7, 5)
+
+plot(result$grid, result$posterior, type="b",
+     xlab="probability of water" , ylab="posterior probability")
+
+mtext(sprintf("%d points" , num_points))
+```
+
+### p47, 2M2
+
+$$
+\begin{align}
+p(\text{globe=Earth|throw=land}) &= \frac{p(\text{throw=land | globe=Earth}) \times p(\text{globe=Earth})}{p(\text{throw=land})} \\
+&= \frac{p(\text{throw=land | globe=Earth}) \times p(\text{globe=Earth})}{p(\text{throw=land | globe=Earth}) \times p(\text{globe=Earth}) + p(\text{throw=land | globe=Mars}) \times p(\text{globe=Mars})} \\
+\end{align}
+$$
+```{r}
+0.3 * 0.5 / (0.3 * 0.5 + 1 * 0.5)
+```
+
+### p47, 2M4
+Considering the three cards; WW, BW, BB.
+
+1. Pulling WW
+  a. Upside = W
+  b. Upside = W
+
+2. Pulling BW
+  a. Upside = B
+  b. Upside = W
+
+3. Pulling BB
+  a. Upside = B
+  b. Upside = B
+
+Given that upside = B, then only 3a, 3b and 2a are valid events, and only card 3 has another B face. Hence, the probability of downside = B is equal to 2/3.
+
+### p47, 2M5
+Now we have:
+
+1. Pulling WW
+  a. Upside = W
+  b. Upside = W
+
+2. Pulling BW
+  a. Upside = B
+  b. Upside = W
+
+3. Pulling BB
+  a. Upside = B
+  b. Upside = B
+  
+4. Pulling BB
+  a. Upside = B
+  b. Upside = B
+  
+Given that upside = B, then only 2a, 3a, 3b, 4a, 4b are valid events, and only cards 3 and 4 has another B face. Hence, the probability of downside = B is equal to 4/5.
+
+### p47, 2M6
+```{r, echo=FALSE}
+dt = tribble(
+  ~conjecture, ~prior, ~pulling_prob, ~total,
+  "BB", 2, 1, 2, 
+  "WB", 1, 2, 2,
+  "WW", 0, 3, 0,
+)
+
+dt %>%
+  kbl() %>%
+  kable_paper("hover", full_width = F)
+```
+Therefore, we have 2 out of 4 ways (0.5 probability) of pulling the BB card.
+
+### p47, 2M7
+
+We in the first pull, again, we have the following ways of having a black side downside:
+```{r, echo=FALSE}
+dt = tribble(
+  ~conjecture, ~ways,
+  "BB", 2,
+  "WB", 1,
+  "WW", 0,
+)
+
+dt %>%
+  kbl() %>%
+  kable_paper("hover", full_width = F)
+```
+
+The number of ways of having a white side upside given the first card is:
+```{r, echo=FALSE}
+dt = tribble(
+  ~conjecture, ~ways,
+  "WB|BB", 1,
+  "WW|BB", 2,
+  "WW|WB", 2,
+  "BB|WB", 0
+)
+
+dt %>%
+  kbl() %>%
+  kable_paper("hover", full_width = F)
+```
+
+Therefore we have $(1 + 2) * 2 = 6$ ways of pulling BB first and $2 * 1 = 2$ of pulling WB fist. Therefore, the probability that the first card has a 2 black sides is $6/(6 + 2) = 0.75$.
+
+## p48, 2H1
+Let $p_A, p_B$ the probability of giving birth to twins of pandas A and B respectively. $U = 1$ is the random variable that represents the panda species A and $U = 0$ the species B; $B_i = 1$ represents that i-th birth is twins and $B_i = 0$ non-twins.
+
+Applying the law of total probability we have:
+
+$$
+\begin{aligned}
+p(B_2 = 1 | B_1 = 1) &= p(B_2 = 1|B_1 = 1, U = 1) * p(U = 1 | B_1 = 1) + p(B_2 = 1|B_1 = 1, U = 0) * p(U = 0 | B_1 = 1) \\
+&= p(B_2 = 1|U = 1) * p(U = 1 | B_1 = 1) + p(B_2 = 1| U = 0) * p(U = 0 | B_1 = 1)
+\end{aligned}
+$$
+And 
+$$
+\begin{align}
+p(U = 1 | B_1 = 1) &= \frac{p(B_1 = 1 | U = 1) * p(U = 1)}{p(B_1 = 1 | U = 1) * p(U = 1) + p(B_1 = 1 | U = 0) * p(U = 0)} \\
+&=\frac{0.1 * 0.5}{0.1*0.5 + 0.2 * 0.5} \\
+&= 0.333
+\end{align}
+$$
+
+Replacing the result in the first equation:
+$$
+\begin{aligned}
+p(B_2 = 1 | B_1 = 1) &= p(B_2 = 1|U = 1) * p(U = 1 | B_1 = 1) + p(B_2 = 1| U = 0) * p(U = 0 | B_1 = 1) \\
+&= 0.1 * 0.3333 + 0.2*(1 - 0.3333) \\
+&= 0.167
+\end{aligned}
+$$
+We can also get this result by simulation:
+```{r}
+num_it = 3000000
+
+# sample panda
+U = rbinom(num_it, 1, 0.5)
+p = if_else(U == 1, 0.1, 0.2)
+
+# sample first birth
+b1 = rbinom(num_it, 1, p)
+
+# sample second birth
+b2 = rbinom(num_it, 1, p)
+
+res = tibble(b1=b1, b2=b2) %>%
+  filter(b1 == 1) %>% # Given that first birth is twins
+  summarize(
+    mean = mean(b2) # Probability of having second twins
+  )
+
+res$mean
+```
+## p48, 2H2
+We have computed this before as 
+
+$$
+\begin{align}
+p(U = 1 | B_1 = 1) &= \frac{p(B_1 = 1 | U = 1) * p(U = 1)}{p(B_1 = 1 | U = 1) * p(U = 1) + p(B_1 = 1 | U = 0) * p(U = 0)} \\
+&=\frac{0.1 * 0.5}{0.1*0.5 + 0.2 * 0.5} \\
+&= 0.333
+\end{align}
+$$
+By simulation:
+```{r}
+num_it = 3000000
+
+# sample panda
+U = rbinom(num_it, 1, 0.5)
+p = if_else(U == 1, 0.1, 0.2)
+
+# sample first birth
+b1 = rbinom(num_it, 1, p)
+
+res = tibble(U=U, b1=b1) %>%
+  filter(b1 == 1) %>% # Given that first birth is twins
+  summarize(
+    mean = mean(U) # Probability that the panda is from species A
+  )
+
+res$mean
+```
+
+## p48, 2H3
+
+We can simply consider that the prior probability of being from species A is the posterior probability of exercise 2H2, that is $p(U = 1) = p(U = 1 | B_1 = 1)= 0.333$:
+
+$$
+\begin{align}
+p(U = 1 | B_2 = 0, B_1 = 1) &= \frac{p(B_2 = 0 | U = 1) * p(U = 1 | B_1 = 1)}{p(B_2 = 0 | U = 1) * p(U = 1| B_1 = 1) + p(B_2 = 0 | U = 0) * p(U = 0| B_1 = 1)} \\
+&=\frac{(1-0.1) * 0.333}{(1-0.1)*0.333 + (1-0.2) * (1 - 0.333)} \\
+&= 0.360 
+\end{align}
+$$
+
+By simulation:
+```{r}
+num_it = 3000000
+
+# sample panda
+U = rbinom(num_it, 1, 0.5)
+p = if_else(U == 1, 0.1, 0.2)
+
+# sample first birth
+b1 = rbinom(num_it, 1, p)
+b2 = rbinom(num_it, 1, p)
+
+res = tibble(U=U, b1=b1, b2=b2) %>%
+  filter(b1 == 1, b2 == 0) %>% # Given that first birth is twins
+  summarize(
+    mean = mean(U) # Probability that the panda is from species A
+  )
+
+res$mean
+```
+
+## p48, 2H4
+We add a variable $T$ which represent the result of test such that $T = 1$ indicates that the test identifies the panda is species A. Therefore, $p(T = 1 | U = 1) = 0.8$ and $p(T = 0 | U = 0) = 0.65$.
+
+Ignoring the births, the probability of panda being from species A given a test that identifies it from species A is:
+$$
+\begin{align}
+p(U = 1 | T = 1) &= \frac{p(T = 1 | U = 1) * p(U = 1)}{p(T = 1 | U = 1) * p(U = 1) + p(T = 1 | U = 0) * p(U = 0)} \\
+&=\frac{0.8 * 0.5}{0.8*0.5 + (1-0.65) * 0.5} \\
+&= 0.696 
+\end{align}
+$$
+
+By simulation:
+```{r}
+num_it = 3000000
+
+# sample panda
+U = rbinom(num_it, 1, 0.5)
+p = if_else(U == 1, 0.1, 0.2)
+p_test = if_else(U == 1, 0.8, 1-0.65)
+test = rbinom(num_it, 1, p_test) 
+
+# sample first birth
+res = tibble(U=U,test=test) %>%
+  filter(test==1) %>% # Given that the test identifies panda from species A
+  summarize(
+    mean = mean(U) # Probability that the panda is from species A
+  )
+
+res$mean
+```
+
+Again, we can simply use $p(U = 1) = p(U = 1 | B_2 = 0, B_1 = 1)$ to take into account the births information:
+$$
+\begin{align}
+p(U = 1 | T = 1, B_1 = 1, B_2  = 0) &= \frac{p(T = 1 | U = 1) * p(U = 1|B_1 = 1, B_2  = 0)}{p(T = 1 | U = 1) * p(U = 1 | B_1 = 1, B_2  = 0) + p(T = 1 | U = 0) * p(U = 0|B_1 = 1, B_2  = 0)} \\
+&=\frac{0.8 * 0.360}{0.8*0.360 + (1-0.65) * (1-0.360)} \\
+&= 0.563 
+\end{align}
+$$
+And simulating:
+```{r}
+num_it = 10000000
+
+
+U = rbinom(num_it, 1, 0.5)
+p = if_else(U == 1, 0.1, 0.2)
+p_test = if_else(U == 1, 0.8, 1-0.65)
+
+test = rbinom(num_it, 1, p_test) 
+b1 = rbinom(num_it, 1, p)
+b2 = rbinom(num_it, 1, p)
+
+
+res = tibble(U=U, b1=b1, b2=b2, test=test) %>%
+  filter(b1 == 1, b2 == 0, test == 1) %>%
+  summarize(
+    mean = mean(U)
+  )
+
+res$mean
+```
+
