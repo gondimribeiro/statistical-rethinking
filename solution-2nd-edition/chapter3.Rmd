@@ -1,0 +1,341 @@
+---
+title: "Statistical Rethinking -- Chapters 3"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(rethinking)
+library(kableExtra)
+library(tibble)
+library(dplyr)
+```
+
+## p49
+```{r}
+p_vampire = 0.001
+p_positive_vampire = 0.95
+p_positive_mortal = 0.01
+
+p_positive = p_vampire * p_positive_vampire + (1 - p_vampire) * p_positive_mortal
+
+p_vampire_positive = p_positive_vampire * p_vampire / p_positive
+
+p_vampire_positive
+```
+
+## p52-54
+```{r}
+num_points = 1000
+N = 9
+x = 6
+
+globe_toss_uniform = function(x, N, num_points) {
+  p_grid = seq(from=0, to=1, length.out=num_points)
+  prior = rep(1, num_points)
+  likelihood = dbinom(x, size=N, prob=p_grid) 
+  posterior = likelihood * prior
+  posterior = posterior / sum(posterior)
+  return(list(p_grid=p_grid, posterior=posterior))
+}
+
+result = globe_toss_uniform(x, N, num_points)
+p_grid = result$p_grid
+posterior = result$posterior
+plot(x=p_grid, y=posterior)
+```
+
+```{r}
+num_samples = 1e4
+samples = sample(p_grid, prob=posterior, size=num_samples, replace=T)
+plot(samples)
+```
+
+```{r}
+dens(samples)
+```
+
+### Intervals of defined boundaries
+```{r}
+sum(posterior[p_grid < 0.5])
+```
+
+```{r}
+mean(samples < 0.5)
+```
+
+```{r}
+mean(samples > 0.5 & samples < 0.75)
+```
+
+## p.55
+### Intervals of defined mass
+
+```{r}
+quantile(samples, 0.8)
+```
+
+```{r}
+quantile(samples, c(0.1, 0.9))
+```
+
+```{r}
+result = globe_toss_uniform(3, 3, num_points)
+plot(x=result$p_grid, y=result$posterior)
+```
+
+```{r}
+samples = sample(x=result$p_grid, prob=result$posterior, size=num_samples, replace=T)
+quantile(samples, c(0.25, 0.75))
+```
+
+```{r}
+# TODO: find how this method is implemented
+HPDI(samples, 0.5)
+```
+
+## p.59
+### Point estimates
+```{r}
+result$p_grid[which.max(result$posterior)]
+```
+
+
+```{r}
+chainmode(samples, adj=0.01)
+```
+
+```{r}
+mean(samples)
+median(samples)
+```
+
+```{r}
+sum(result$posterior * abs(result$p_grid - 0.5))
+```
+
+```{r}
+loss = sapply(result$p_grid, function(d) sum(result$posterior * abs(d - p_grid)))
+
+result$p_grid[which.min(loss)]
+```
+
+## p.63
+### Dummy data
+```{r}
+dbinom(0:2, size=2, prob=6/9)
+```
+
+```{r}
+dummy_w = rbinom(1e5, size=2, prob=6/9)
+table(dummy_w)/1e5
+```
+
+```{r}
+dummy_w = rbinom(1e5, size=9, prob=6/9)
+simplehist(dummy_w, xlab="count")
+```
+
+## p.64
+### Model checking
+
+```{r}
+result = globe_toss_uniform(6, 9, 1e5)
+samples = sample(x=result$p_grid, prob=result$posterior, size=1e5, replace=T)
+
+w = rbinom(1e5, size=9, prob=samples)
+simplehist(w)
+```
+
+
+# Practice
+## Easy
+```{r}
+p_grid = seq(from=0, to=1,length.out=1000)
+prior = rep(1 , 1000)
+likelihood = dbinom(6, size=9, prob=p_grid) 
+posterior = likelihood * prior
+posterior = posterior / sum(posterior)
+set.seed(100)
+samples = sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+```
+### 3E1
+```{r}
+mean(samples < 0.2)
+```
+
+### 3E2
+```{r}
+mean(samples < 0.8)
+```
+
+### 3E3
+```{r}
+mean(samples > 0.2 & samples < 0.8)
+```
+
+### 3E4
+```{r}
+quantile(samples, 0.2)
+```
+
+### 3E5
+```{r}
+quantile(samples, 0.8)
+```
+
+### 3E6
+```{r}
+HPDI(samples, 0.66)
+```
+
+### 3E6
+```{r}
+PI(samples, 0.66)
+```
+
+## Medium
+```{r}
+rm(.Random.seed, envir=globalenv())
+```
+
+### 3M1
+```{r}
+result = globe_toss_uniform(8, 15, 1e4)
+plot(x=result$p_grid, y=result$posterior)
+```
+
+### 3M2
+```{r}
+samples = sample(x=result$p_grid, size=1e4, prob=result$posterior, replace=T)
+HPDI(samples, 0.9)
+```
+
+### 3M3
+```{r}
+pred = rbinom(1e4, size=15, prob=samples)
+mean(pred == 8)
+```
+
+### 3M4
+```{r}
+pred = rbinom(1e4, size=9, prob=samples)
+mean(pred == 6)
+```
+```{r}
+mean(samples > 0.65 & samples < 0.75)
+```
+
+
+### 3M5
+```{r}
+globe_toss_half_zero = function(x, N, num_points=1e4) {
+  p_grid = seq(from=0, to=1, length.out=num_points)
+  prior = rep(1, num_points)
+  prior[p_grid < 0.5] = 0
+  
+  likelihood = dbinom(x, size=N, prob=p_grid)
+  posterior = likelihood * prior
+  posterior = posterior / sum(posterior)
+
+  return(list(p_grid=p_grid, posterior=posterior))
+}
+
+result = globe_toss_half_zero(8, 15)
+plot(x=result$p_grid, y=result$posterior)
+```
+
+```{r}
+samples = sample(x=result$p_grid, size=1e4, prob=result$posterior, replace=T)
+HPDI(samples, 0.9)
+
+pred = rbinom(1e4, size=15, prob=samples)
+mean(pred == 8)
+
+pred = rbinom(1e4, size=9, prob=samples)
+mean(pred == 6)
+```
+
+```{r}
+mean(samples > 0.65 & samples < 0.75)
+```
+
+Using the second prior, we obtain higher probability around the true value of 0.7. That is, imbuing the model with prior knowledge enhanced our estimates.
+
+### 3M6
+```{r}
+true_p = 0.7
+num_toss = 2220
+
+result = globe_toss_uniform(rbinom(1, num_toss, true_p), num_toss, 1e4)
+samples = sample(x=result$p_grid, size=1e4, prob=result$posterior, replace=T)
+pi = PI(samples, 0.99)
+pi
+pi[2] - pi[1]
+
+# Test for different prior
+result = globe_toss_uniform(rbinom(1, num_toss, true_p), num_toss, 1e4)
+samples = sample(x=result$p_grid, size=1e4, prob=result$posterior, replace=T)
+pi = PI(samples, 0.99)
+pi
+pi[2] - pi[1]
+```
+
+## Hard
+```{r}
+data(homeworkch3)
+```
+
+### 3H1
+```{r}
+num_boys = sum(birth1) + sum(birth2)
+total = length(birth1) + length(birth2)
+num_samples = 1e4
+
+result = globe_toss_uniform(num_boys, total, num_samples)
+plot(x=result$p_grid, y=result$posterior)
+
+result$p_grid[which.max(result$posterior)]
+```
+
+### 3H2
+```{r}
+samples = sample(x=result$p_grid, size=num_samples, prob=result$posterior, replace=T)
+HPDI(samples, 0.5)
+HPDI(samples, 0.89)
+HPDI(samples, 0.97)
+```
+
+### 3H3
+```{r}
+pred = rbinom(num_samples, size=total, prob=samples)
+dens(pred)
+
+abline(v=num_boys)
+```
+
+The model is quite precise in this case. Diverging just a little from the real value.
+
+### 3H4
+```{r}
+num_boys1 = sum(birth1)
+total = length(birth1)
+
+pred = rbinom(num_samples, size=total, prob=samples)
+dens(pred)
+abline(v=num_boys1)
+```
+
+The model starts to diverge from the real data. That is, the model expected more boys on the first birth than we have in the dataset.
+
+### 3H5
+```{r}
+num_girls_first = sum(birth1 == 0)
+boys_followed_girls = birth2[birth1 == 0]
+
+pred = rbinom(num_samples, size=num_girls_first, prob=samples)
+dens(pred)
+abline(v=sum(boys_followed_girls))
+```
+
+
